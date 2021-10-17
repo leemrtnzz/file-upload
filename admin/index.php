@@ -88,7 +88,7 @@ select{
    {  echo "<tr><td><a href=\"download.php?id=" . urlencode($file). "\">$file</a></td>";  
      echo "<td>" . date ("d/m/Y H:m:s", filemtime("../files/".$file)) . '</td>';  
      echo "<td>" . pathinfo("../files/".$file, PATHINFO_EXTENSION) . ' file </td>';  
-     echo "<td>" . round(filesize("../files/".$file)/1024) . ' KB</td>';  
+     echo "<td>" . round(filesize("../files/".$file)/10240) . ' KB</td>';  
      echo "<td><a href=\"hapus.php?id=$file\">Delete</a></td></tr>";  
      }  
    }  
