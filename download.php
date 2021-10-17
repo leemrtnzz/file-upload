@@ -1,5 +1,5 @@
 <?php  
- $direktori = "./files/";  
+ $direktori = "./../files/";  
  $filename = $_GET['id'];  
  if(file_exists($direktori.$filename)){  
    $file_extension = strtolower(pathinfo($filename, PATHINFO_EXTENSION));  
