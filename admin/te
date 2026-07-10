@@ -1,0 +1,190 @@
+// ==========================================
+// FILE 1: index.php
+// ==========================================
+<?php
+$uploadDir = '../files/';
+$files = is_dir($uploadDir) ? array_diff(scandir($uploadDir), array('.', '..')) : [];
+?>
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>File Upload Simple</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding: 2rem; background-color: #f8f9fa; }
+        .upload-card { max-width: 500px; margin: 0 auto 2rem auto; border-radius: 12px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card upload-card shadow-sm">
+            <div class="card-body text-center p-4">
+                <h3 class="text-danger mb-4">File Upload Local</h3>
+                <form method="post" action="uploader.php" enctype="multipart/form-data" id="uploadForm">
+                    <input class="form-control mb-3" type="file" name="uploadedfile" id="fileInput" required autofocus> 
+                    <button type="submit" name="upload" class="btn btn-primary w-100">Upload File</button>
+                </form>
+            </div>
+        </div>
+
+        <div class="table-responsive mx-auto shadow-sm" style="max-width: 900px;">
+            <table class="table table-bordered table-hover table-light align-middle text-center mb-0">  
+                <thead class="table-secondary">
+                    <tr>  
+                        <th>File Name</th>  
+                        <th>Upload Date</th>  
+                        <th>Type</th>  
+                        <th>Size</th>  
+                        <th>Action</th>  
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php if (empty($files)): ?>
+                        <tr>
+                            <td colspan="5" class="text-muted py-3">Belum ada file yang diupload.</td>
+                        </tr>
+                    <?php else: ?>
+                        <?php foreach ($files as $file): 
+                            $filePath = $uploadDir . $file;
+                            $safeName = htmlspecialchars($file, ENT_QUOTES, 'UTF-8');
+                            $bytes = filesize($filePath);
+                            $sizeInfo = $bytes >= 1048576 
+                                ? round($bytes / 1048576, 2) . ' MB' 
+                                : round($bytes / 1024, 2) . ' KB';
+                        ?>
+                        <tr>
+                            <td><a href="download.php?id=<?= urlencode($file) ?>" class="text-decoration-none fw-bold"><?= $safeName ?></a></td>
+                            <td><?= date("d/m/Y H:i:s", filemtime($filePath)) ?></td>
+                            <td><span class="badge bg-secondary"><?= strtoupper(pathinfo($filePath, PATHINFO_EXTENSION)) ?></span></td>
+                            <td><?= $sizeInfo ?></td>
+                            <td>
+                                <a href="hapus.php?id=<?= urlencode($file) ?>" class="btn btn-sm btn-danger" onclick="return confirm('Yakin hapus file <?= $safeName ?>?')">Delete</a>
+                            </td>
+                        </tr>
+                        <?php endforeach; ?>
+                    <?php endif; ?>
+                </tbody>
+            </table>
+        </div> 
+    </div>
+
+    <script>
+        const MAX_SIZE_MB = 100; 
+        const MAX_SIZE_BYTES = MAX_SIZE_MB * 1024 * 1024;
+
+        document.getElementById('uploadForm').addEventListener('submit', function(e) {
+            const fileInput = document.getElementById('fileInput');
+            if (fileInput.files.length > 0) {
+                if (fileInput.files[0].size > MAX_SIZE_BYTES) {
+                    alert(`Gagal! Ukuran file harus di bawah ${MAX_SIZE_MB} MB.`);
+                    e.preventDefault();
+                }
+            }
+        });
+    </script>
+</body>
+</html>
+
+
+// ==========================================
+// FILE 2: uploader.php
+// ==========================================
+<?php
+if (isset($_POST['upload'])) {
+    $uploadDir = '../files/';
+    
+    if (!is_dir($uploadDir)) {
+        mkdir($uploadDir, 0777, true);
+    }
+
+    // basename() krusial untuk mencegah Path Traversal inject nama file
+    $fileName = basename($_FILES['uploadedfile']['name']);
+    $targetPath = $uploadDir . $fileName;
+    $fileExtension = strtolower(pathinfo($targetPath, PATHINFO_EXTENSION));
+
+    // Proteksi RCE: Tolak file yang bisa dieksekusi di server
+    $blacklisted = ['php', 'phtml', 'php3', 'php4', 'php5', 'phps', 'htaccess', 'js', 'html'];
+    if (in_array($fileExtension, $blacklisted)) {
+        echo "<script>alert('Error: Ekstensi file dilarang demi keamanan server!'); window.location.href='index.php';</script>";
+        exit;
+    }
+
+    // Validasi Sisi Server untuk Ukuran (Double Check JS)
+    if ($_FILES['uploadedfile']['size'] > 100 * 1024 * 1024) {
+        echo "<script>alert('Error: File melebihi batas 100MB!'); window.location.href='index.php';</script>";
+        exit;
+    }
+
+    if (move_uploaded_file($_FILES['uploadedfile']['tmp_name'], $targetPath)) {
+        echo "<script>alert('File berhasil diupload!'); window.location.href='index.php';</script>";
+    } else {
+        echo "<script>alert('Gagal memproses upload file.'); window.location.href='index.php';</script>";
+    }
+} else {
+    header("Location: index.php");
+    exit;
+}
+
+
+// ==========================================
+// FILE 3: download.php
+// ==========================================
+<?php
+if (isset($_GET['id'])) {
+    $uploadDir = '../files/';
+    $fileName = basename($_GET['id']); // Mencegah download file luar sistem (?id=../../etc/passwd)
+    $filePath = $uploadDir . $fileName;
+
+    if (file_exists($filePath) && is_file($filePath)) {
+        // Bersihkan output buffer agar file unduhan tidak korup
+        if (ob_get_level()) {
+            ob_end_clean();
+        }
+
+        // Header standar proses download file aman
+        header('Content-Description: File Transfer');
+        header('Content-Type: application/octet-stream');
+        header('Content-Disposition: attachment; filename="' . $fileName . '"');
+        header('Expires: 0');
+        header('Cache-Control: must-revalidate');
+        header('Pragma: public');
+        header('Content-Length: ' . filesize($filePath));
+        
+        readfile($filePath);
+        exit;
+    } else {
+        echo "<script>alert('File tidak ditemukan!'); window.location.href='index.php';</script>";
+        exit;
+    }
+} else {
+    header("Location: index.php");
+    exit;
+}
+
+
+// ==========================================
+// FILE 4: hapus.php
+// ==========================================
+<?php
+if (isset($_GET['id'])) {
+    $uploadDir = '../files/';
+    $fileName = basename($_GET['id']); // Mencegah manipulasi hapus file krusial (?id=../index.php)
+    $filePath = $uploadDir . $fileName;
+
+    if (file_exists($filePath) && is_file($filePath)) {
+        if (unlink($filePath)) {
+            echo "<script>alert('File berhasil dihapus!'); window.location.href='index.php';</script>";
+        } else {
+            echo "<script>alert('Gagal menghapus file.'); window.location.href='index.php';</script>";
+        }
+        exit;
+    } else {
+        echo "<script>alert('File tidak ditemukan atau sudah terhapus!'); window.location.href='index.php';</script>";
+        exit;
+    }
+} else {
+    header("Location: index.php");
+    exit;
+}
